@@ -1,10 +1,6 @@
 import WhooshingClient
 import Logging
 
-#if WHOOSHING_VAPOR
-import Vapor
-#endif
-
 /// 基于 WhooshingClient 实现的 API 模块 WebSocket 客户端封装，
 /// 提供通用的 WebSocket 连接支持
 ///
@@ -42,18 +38,4 @@ public final class ApiWebSocket: WhooshingWebSocket, Sendable {
         self.logger = client.logger
         self.eventLoop = client.eventLoop
     }
-    
-    #if WHOOSHING_VAPOR
-    /// Vapor 环境下的初始化方式。
-    /// 自动从 Application 获取 eventLoop 和 logger。
-    /// - Parameters:
-    ///   - credential: 身份凭证。
-    ///   - token: 授权令牌。
-    ///   - app: Vapor 应用上下文。
-    public init(credential: String, token: String, app: Application) {
-        self.logger = app.logger
-        self.eventLoop = app.eventLoopGroup.next()
-        self.client = .init(credential: credential, token: token, eventLoop: eventLoop, logger: logger)
-    }
-    #endif
 }

@@ -6,10 +6,6 @@ import NIOFoundationCompat
 import Logging
 import NIOWebSocket
 
-#if WHOOSHING_VAPOR
-import Vapor
-#endif
-
 struct WSCryptoHandler: WSIOHandler, Sendable {
     
     let key: Crypto.Symm.Key

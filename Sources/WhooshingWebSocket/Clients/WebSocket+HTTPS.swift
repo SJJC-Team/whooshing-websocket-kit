@@ -1,10 +1,6 @@
 import WhooshingClient
 import Logging
 
-#if WHOOSHING_VAPOR
-import Vapor
-#endif
-
 /// 基于 WhooshingClient 实现的 HTTPS 模块 WebSocket 客户端封装，
 /// 提供通用的 WebSocket 连接支持
 ///
@@ -27,17 +23,6 @@ public final class HttpsWebSocket: WhooshingWebSocket, Sendable {
         self.logger = logger
         self.eventLoop = eventLoop
     }
-    
-    #if WHOOSHING_VAPOR
-    /// Vapor 环境下的初始化方式。
-    /// 自动从 Application 获取 eventLoop 和 logger。
-    /// - Parameters:
-    ///   - app: Vapor 应用上下文。
-    public init(app: Application) {
-        self.logger = app.logger
-        self.eventLoop = app.eventLoopGroup.next()
-    }
-    #endif
     
     /// 异步建立 WebSocket 连接。
     /// - Parameters:

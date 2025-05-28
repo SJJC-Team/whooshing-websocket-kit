@@ -7,10 +7,6 @@ import Cryptos
 import NIOExtras
 import NIOWebSocket
 
-#if WHOOSHING_VAPOR
-import Vapor
-#endif
-
 /// 定义 WebSocket 客户端协议，支持异步与基于事件循环的连接方式。
 ///
 /// 使用 `websocket.connect(to: onUpgrade:)` 建立新的 WebSocket 连线
