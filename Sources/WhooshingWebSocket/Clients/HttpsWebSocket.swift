@@ -19,7 +19,7 @@ public final class HttpsWebSocket: WhooshingWebSocket, Sendable {
     /// - Parameters:
     ///   - eventLoop: 所使用的事件循环。
     ///   - logger: 可选日志记录器。
-    public init(eventLoop: any EventLoop, logger: Logger? = nil) {
+    public init(in eventLoop: any EventLoop, logger: Logger? = nil) {
         self.logger = logger
         self.eventLoop = eventLoop
     }
