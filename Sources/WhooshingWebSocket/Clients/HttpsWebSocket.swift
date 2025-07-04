@@ -8,6 +8,7 @@ import ErrorHandle
 /// 另见 ``WhooshingWebSocket`` 协议
 public final class HttpsWebSocket: WhooshingWebSocket, Sendable {
     
+    @inlinable
     public var client: HttpsClient { fatalError("永远不应当调用该属性") }
     
     public static let loggerLabel: String = "HTTPS.WS.Client"
