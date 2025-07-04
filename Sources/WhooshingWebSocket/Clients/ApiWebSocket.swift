@@ -17,7 +17,8 @@ public final class ApiWebSocket: WhooshingWebSocket, Sendable {
     public let client: ApiClient
     
     /// 当前所使用的事件循环实例。
-    private let eventLoop: any EventLoop
+    @usableFromInline
+    let eventLoop: any EventLoop
     
     /// 使用凭证和 token 初始化 WebSocket 客户端。
     /// - Parameters:
@@ -25,6 +26,7 @@ public final class ApiWebSocket: WhooshingWebSocket, Sendable {
     ///   - token: 用于认证的访问令牌。
     ///   - eventLoop: 所使用的事件循环。
     ///   - logger: 可选日志记录器。
+    @inlinable
     public init(credential: String, token: String, eventLoop: any EventLoop, logger: Logger? = nil) {
         self.logger = logger
         self.eventLoop = eventLoop
@@ -33,6 +35,7 @@ public final class ApiWebSocket: WhooshingWebSocket, Sendable {
     
     /// 使用已有的 ApiClient 实例初始化 WebSocket 客户端。
     /// - Parameter client: 已构造的 API 客户端。
+    @inlinable
     public init(client: ApiClient) {
         self.client = client
         self.logger = client.logger

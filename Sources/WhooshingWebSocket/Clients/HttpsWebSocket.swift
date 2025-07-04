@@ -1,5 +1,6 @@
 import WhooshingClient
 import Logging
+import ErrorHandle
 
 /// 基于 WhooshingClient 实现的 HTTPS 模块 WebSocket 客户端封装，
 /// 提供通用的 WebSocket 连接支持
@@ -19,6 +20,7 @@ public final class HttpsWebSocket: WhooshingWebSocket, Sendable {
     /// - Parameters:
     ///   - eventLoop: 所使用的事件循环。
     ///   - logger: 可选日志记录器。
+    @inlinable
     public init(in eventLoop: any EventLoop, logger: Logger? = nil) {
         self.logger = logger
         self.eventLoop = eventLoop
@@ -31,19 +33,22 @@ public final class HttpsWebSocket: WhooshingWebSocket, Sendable {
     ///   - configuration: WebSocket 配置。
     ///   - onUpgrade: 成功建立连接时的回调。
     /// - Throws: 请求过程中可能抛出的错误。
+    @inlinable
     @preconcurrency
     public func connect(
         to url: WebURI,
         headers: HTTPHeaders = [:],
         configuration: WebSocketClient.Configuration = .init(),
         onUpgrade: @Sendable @escaping (WebSocket) -> ()
-    ) async throws {
-        try await WebSocket.connect(
-            to: url.string,
-            headers: headers,
-            configuration: configuration,
-            on: eventLoop,
-            onUpgrade: onUpgrade
-        ).get()
+    ) async throws(Failure) {
+        try await required(throws: Errcase.wsConnectFailed) {
+            try await WebSocket.connect(
+                to: url.string,
+                headers: headers,
+                configuration: configuration,
+                on: eventLoop,
+                onUpgrade: onUpgrade
+            ).get()
+        }
     }
 }

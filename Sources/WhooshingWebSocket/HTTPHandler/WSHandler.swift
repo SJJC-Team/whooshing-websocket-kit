@@ -2,29 +2,31 @@ import NIOCore
 import Logging
 import WhooshingClient
 import ErrorHandle
+import NIOAdvanced
 
 public protocol WSIOHandler: Sendable {
-    func send(dataChunk: ByteBuffer, context: ChannelHandlerContext) -> EventLoopFuture<ByteBuffer>
-    func get(dataChunk: ByteBuffer, context: ChannelHandlerContext) -> EventLoopFuture<ByteBuffer>
-    func connectionStart(context: ChannelHandlerContext) -> EventLoopFuture<Void>
-    func connectionEnd(context: ChannelHandlerContext) -> EventLoopFuture<Void>
+    associatedtype Failure: Error
+    func send(dataChunk: ByteBuffer, context: ChannelHandlerContext) -> EventLoopResult<ByteBuffer, Failure>
+    func get(dataChunk: ByteBuffer, context: ChannelHandlerContext) -> EventLoopResult<ByteBuffer, Failure>
+    func connectionStart(context: ChannelHandlerContext) -> EventLoopResult<Void, Failure>
+    func connectionEnd(context: ChannelHandlerContext) -> EventLoopResult<Void, Failure>
 }
 
 public extension WSIOHandler {
-    func connectionStart(context: ChannelHandlerContext) -> EventLoopFuture<Void> { context.eventLoop.makeSucceededVoidFuture() }
-    func connectionEnd(context: ChannelHandlerContext) -> EventLoopFuture<Void> { context.eventLoop.makeSucceededVoidFuture() }
+    func connectionStart(context: ChannelHandlerContext) -> EventLoopResult<Void, Failure> { context.eventLoop.makeSucceededVoidResult() }
+    func connectionEnd(context: ChannelHandlerContext) -> EventLoopResult<Void, Failure> { context.eventLoop.makeSucceededVoidResult() }
 }
 
-final class WSHandler: ChannelDuplexHandler, Sendable {
+final class WSHandler<IOHandler>: ChannelDuplexHandler, Sendable where IOHandler: WSIOHandler {
     typealias InboundIn = ByteBuffer
     typealias InboundOut = ByteBuffer
     typealias OutboundIn = ByteBuffer
     typealias OutboundOut = ByteBuffer
     
     private let logger: Logger?
-    private let ioHandler: any WSIOHandler
+    private let ioHandler: IOHandler
     
-    init(ioHandler: any WSIOHandler, logger: Logger? = nil) {
+    init(ioHandler: IOHandler, logger: Logger? = nil) {
         self.logger = logger
         self.ioHandler = ioHandler
     }
@@ -44,7 +46,7 @@ final class WSHandler: ChannelDuplexHandler, Sendable {
         let data = unwrapOutboundIn(data)
         guard data.readableBytes > 0 else { return }
 
-        let r = self.ioHandler.send(dataChunk: data, context: context).flatMap { data in
+        let r = self.ioHandler.send(dataChunk: data, context: context).wrapped.flatMap { data in
             return context.writeAndFlush(self.wrapOutboundOut(data))
         }.flatMapErrorThrowing { err in
             self.errorHappend(context: context, error: err)
