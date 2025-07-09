@@ -1,10 +1,11 @@
-import NIOCore
 import WhooshingClient
 import ErrorHandle
-import NIOHTTP1
 import Logging
 import Cryptos
+import NIOCore
+import NIOHTTP1
 import NIOExtras
+import NIOAdvanced
 import NIOWebSocket
 
 /// 定义 WebSocket 客户端协议，支持异步与基于事件循环的连接方式。
@@ -49,6 +50,8 @@ import NIOWebSocket
 public protocol WhooshingWebSocket: AnyObject, Sendable {
     
     associatedtype Client: WhooshingClient
+    typealias Errcase = WhooshingWebSocketErrcase
+    typealias Failure = WhooshingWebSocketErrcase.ErrType
     
     /// 与 WebSocket 建立连接时所依赖的底层 HTTP 客户端。
     var client: Client { get }
@@ -67,7 +70,13 @@ public protocol WhooshingWebSocket: AnyObject, Sendable {
     ///   - configuration: WebSocket 配置项。
     ///   - onUpgrade: 成功建立连接时的回调，提供 WebSocket 对象。
     /// - Returns: 一个标识连接完成的 Future。
-    @preconcurrency func connect(to url: WebURI, headers: HTTPHeaders, on eventLoop: any EventLoop, configuration: WebSocketClient.Configuration, onUpgrade: @Sendable @escaping (WebSocket) -> ()) -> EventLoopFuture<Void>
+    @preconcurrency func connect(
+        to url: WebURI,
+        headers: HTTPHeaders,
+        on eventLoop: any EventLoop,
+        configuration: WebSocketClient.Configuration,
+        onUpgrade: @Sendable @escaping (WebSocket) -> ()
+    ) -> EventLoopResult<Void, Failure>
     
     /// 异步建立 WebSocket 连接。
     /// - Parameters:
@@ -76,12 +85,17 @@ public protocol WhooshingWebSocket: AnyObject, Sendable {
     ///   - configuration: WebSocket 配置。
     ///   - onUpgrade: 成功建立连接时的回调。
     /// - Throws: 请求过程中可能抛出的错误。
-    @preconcurrency func connect(to url: WebURI, headers: HTTPHeaders, configuration: WebSocketClient.Configuration, onUpgrade: @Sendable @escaping (WebSocket) -> ()) async throws
+    @preconcurrency func connect(
+        to url: WebURI,
+        headers: HTTPHeaders,
+        configuration: WebSocketClient.Configuration,
+        onUpgrade: @Sendable @escaping (WebSocket) -> ()
+    ) async throws(Failure)
 }
 
 /// 定义 WebSocket 相关的错误类型。
+@frozen
 public enum WhooshingWebSocketErr: String, ErrList {
-    public var domain: String { "woo.sys.api.websocket.err" }
     case responseError = "服务器返回的响应不正确"
     case unknowError = "发送请求时发生未知错误"
 }
@@ -89,6 +103,7 @@ public enum WhooshingWebSocketErr: String, ErrList {
 public extension WhooshingWebSocket {
     /// 提供基于事件循环的 `connect` 包装，兼容异步场景。
     /// 自动将异步连接过程封装进 `EventLoopFuture`。
+    @inlinable
     @preconcurrency
     func connect(
         to url: WebURI,
@@ -96,8 +111,8 @@ public extension WhooshingWebSocket {
         on eventLoop: any EventLoop,
         configuration: WebSocketClient.Configuration = .init(),
         onUpgrade: @Sendable @escaping (WebSocket) -> ()
-    ) -> EventLoopFuture<Void> {
-        eventLoop.makeFutureWithTask {
+    ) -> EventLoopResult<Void, Failure> {
+        eventLoop.makeResultWithTask { () throws(Failure) in
             try await self.connect(to: url, headers: headers, configuration: configuration, onUpgrade: onUpgrade)
         }
     }
@@ -108,13 +123,14 @@ public extension WhooshingWebSocket {
     ///   - headers: 可选 HTTP 请求头。
     ///   - configuration: WebSocket 配置。
     ///   - onUpgrade: 成功建立连接时的回调。
+    @inlinable
     @preconcurrency
     func connect(
         to url: WebURI,
         headers: HTTPHeaders = [:],
         configuration: WebSocketClient.Configuration = .init(),
         onUpgrade: @Sendable @escaping (WebSocket) -> ()
-    ) async throws {
+    ) async throws(Failure) {
         let httpURI = WebURI(scheme: .http, host: url.host, port: url.port, path: url.path, query: url.query, fragment: url.fragment)
         
         self.logger?.debug("\(Self.loggerLabel)-正在第一次 ping 以建立连接: \(httpURI)")
@@ -127,46 +143,62 @@ public extension WhooshingWebSocket {
 }
 
 extension WhooshingWebSocket {
-    private func firstPing(uri: WebURI) async throws {
-        let res = try await client.get(uri)
+    @usableFromInline
+    func firstPing(uri: WebURI) async throws(Failure) {
+        let res = try await required(throws: Errcase.pingFailed) {
+            try await client.get(uri)
+        }
         guard res.status == .switchingProtocols else {
-            throw WhooshingWebSocketErr.responseError.d("预期为 \(HTTPResponseStatus.switchingProtocols.code)(\(HTTPResponseStatus.switchingProtocols.reasonPhrase)), 却得到 \(res.status.code)(\(res.status.reasonPhrase))", 15001)
+            throw Errcase.pingFailed.d("预期为 \(HTTPResponseStatus.switchingProtocols)), 却得到 \(res.status))")
         }
     }
     
-    private func upgradeReq(uri: WebURI, headers: HTTPHeaders) async throws {
+    @usableFromInline
+    func upgradeReq(uri: WebURI, headers: HTTPHeaders) async throws(Failure) {
         var headers = headers
         headers.replaceOrAdd(name: "upgrade", value: "websocket")
         headers.replaceOrAdd(name: "connection", value: "upgrade")
         headers.replaceOrAdd(name: "sec-websocket-key", value: Crypto.randomDataGenerate(length: 16).base64EncodedString())
         headers.replaceOrAdd(name: "sec-websocket-version", value: "13")
 
-        let upgradeRes = try await client.get(uri, headers: headers)
+        let upgradeRes = try await required(throws: Errcase.upgradeFailed) {
+            try await client.get(uri, headers: headers)
+        }
 
         guard upgradeRes.status == .switchingProtocols else {
-            throw WhooshingWebSocketErr.responseError.d("预期为 \(HTTPResponseStatus.switchingProtocols.code)(\(HTTPResponseStatus.switchingProtocols.reasonPhrase)), 却得到 \(upgradeRes.status.code)(\(upgradeRes.status.reasonPhrase))", 15001)
+            throw Errcase.upgradeFailed.d("预期为 \(HTTPResponseStatus.switchingProtocols)), 却得到 \(upgradeRes.status)")
         }
     }
 
-    private func establishWebsocketConnect(configuration: WebSocketClient.Configuration, onUpgrade: @Sendable @escaping (WebSocket) -> ()) async throws {
+    @usableFromInline
+    func establishWebsocketConnect(
+        configuration: WebSocketClient.Configuration,
+        onUpgrade: @Sendable @escaping (WebSocket) -> ()
+    ) async throws(Failure) {
         guard let channel = client.channel else {
-            throw WhooshingWebSocketErr.unknowError.d("TCP 连接不存在，无法创建 WebSocket 连接", 15003)
+            throw Errcase.internalFailure.d("TCP 连接不存在，无法创建 WebSocket 连接")
         }
 
         guard let key = client.key else {
-            throw WhooshingWebSocketErr.unknowError.d("密钥不存在", 15002)
+            throw Errcase.internalFailure.d("密钥不存在")
         }
 
         let ioHandler = WSCryptoHandler(key: key, logger: logger)
         let wsHandler = WSHandler(ioHandler: ioHandler, logger: self.logger)
         
         self.logger?.trace("\(Self.loggerLabel)-在 TCP Channel 中建立 WebSocket Handler，并移除原有的 Client Handler")
-        try await client.removeHTTPHandlers()
-        try await channel.pipeline.addHandlers([
-            wsHandler,
-            WebSocketFrameEncoder(),
-            ByteToMessageHandler(WebSocketFrameDecoder(maxFrameSize: configuration.maxFrameSize))
-        ])
+        
+        try await required(throws: Errcase.tcpHandlerRemoveFailed) {
+            try await client.removeHTTPHandlers().get()
+        }
+        
+        try await required(throws: Errcase.wsHandlerAddFailed) {
+            try await channel.pipeline.addHandlers([
+                wsHandler,
+                WebSocketFrameEncoder(),
+                ByteToMessageHandler(WebSocketFrameDecoder(maxFrameSize: configuration.maxFrameSize))
+            ])
+        }
 
         channel.eventLoop.flatSubmit {
             WebSocket.client(on: channel, config: .init(clientConfig: configuration), onUpgrade: onUpgrade)
