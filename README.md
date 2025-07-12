@@ -107,9 +107,9 @@ try await socket.connect(to: WebURI("ws://localhost:8080/echo")) { ws in
 ### 运行环境
 
 * **macOS** (> 10.15)
-* **iOS** (> 13.0)
+* **iOS** (> 14.0)
 * **Linux** (> 20)
-* **Swift** (> 5.9)
+* **Swift** (> 6.0)
 * **watchOS** (> 6.0) **[未测试]**
 * **tvOS**(> 13) **[未测试]**
 
